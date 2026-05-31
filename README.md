@@ -5,9 +5,30 @@ agent**. Built from scratch in TypeScript (ESM, Node ≥18), it talks to the Ant
 API, streams output to an Ink (React-in-the-terminal) UI, executes a core tool set against the
 local filesystem and shell, and gates dangerous actions behind a permission system.
 
-> **Status:** Design phase. This repository currently contains the **architecture and roadmap
-> only** — no application code yet. Implementation follows the phased plan in
-> [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> **Status:** Phase 1 (core agent) implemented. The streaming agent loop, the full core tool
+> set, the permission system, layered settings, hooks, project context, print mode, and the Ink
+> TUI all work end-to-end. Later phases (session resume, web tools, MCP, packaging) follow the
+> plan in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## Quick start
+
+```bash
+npm install
+npm run build
+export ANTHROPIC_API_KEY=sk-ant-...      # or put it in a .env file (see .env.example)
+
+# Interactive TUI:
+node dist/index.js
+
+# Print mode (non-interactive, scriptable):
+node dist/index.js -p "list the TODO comments in this repo"
+
+# Read-only plan mode:
+node dist/index.js --permission-mode plan -p "how would you add a --json flag?"
+```
+
+Dev (no build step): `npm run dev -- -p "hello"`. Tests/typecheck/lint: `npm test`,
+`npm run typecheck`, `npm run lint`.
 
 ## What it will do
 
