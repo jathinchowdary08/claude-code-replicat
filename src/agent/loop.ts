@@ -31,6 +31,10 @@ export interface RunAgentOptions {
   maxTokens?: number;
   maxTurns?: number;
   enableCompaction?: boolean;
+  /** Extended-thinking budget in tokens (omit/0 to disable). */
+  thinkingBudget?: number;
+  /** Called for each message appended to the conversation (for session persistence). */
+  onMessage?: (message: Anthropic.MessageParam) => void;
 }
 
 function toAppError(err: unknown): AppError {
@@ -52,7 +56,8 @@ function toToolResultBlock(id: string, res: ToolResult): Anthropic.ToolResultBlo
 
 export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEvent, void> {
   const { client, model, registry, messages, signal, permissions, hooks, ctx, confirmPermission } = opts;
-  const maxTokens = opts.maxTokens ?? DEFAULT_MAX_TOKENS;
+  // Thinking budget must leave room for the response, so floor max_tokens above it.
+  const maxTokens = Math.max(opts.maxTokens ?? DEFAULT_MAX_TOKENS, (opts.thinkingBudget ?? 0) + 1024);
   const contextWindow = resolveModel(model).contextWindow;
   let turns = 0;
 
@@ -79,6 +84,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
         tools: registry.api,
         maxTokens,
         signal,
+        thinkingBudget: opts.thinkingBudget,
       });
       let step = await gen.next();
       while (!step.done) {
@@ -92,9 +98,15 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       const usage = usageFrom(final.usage);
       yield { type: 'usage', usage, cost: costOf(model, usage) };
 
-      messages.push({ role: 'assistant', content: final.content as Anthropic.ContentBlockParam[] });
+      const assistantMessage: Anthropic.MessageParam = {
+        role: 'assistant',
+        content: final.content as Anthropic.ContentBlockParam[],
+      };
+      messages.push(assistantMessage);
+      opts.onMessage?.(assistantMessage);
 
       if (final.stop_reason !== 'tool_use') {
+        await hooks.run('Stop', { stopReason: final.stop_reason });
         yield { type: 'turn_end', stopReason: final.stop_reason };
         return;
       }
@@ -165,7 +177,9 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       // Append all tool results (plus any reminders) as one user message, then continue.
       const reminder = buildReminders(ctx);
       if (reminder) resultBlocks.push({ type: 'text', text: reminder });
-      messages.push({ role: 'user', content: resultBlocks });
+      const toolResultMessage: Anthropic.MessageParam = { role: 'user', content: resultBlocks };
+      messages.push(toolResultMessage);
+      opts.onMessage?.(toolResultMessage);
     } catch (err) {
       if (isCancel(err)) {
         yield { type: 'turn_end', stopReason: 'cancelled' };

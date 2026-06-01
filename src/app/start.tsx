@@ -14,6 +14,8 @@ export async function startInteractive(args: CliArgs): Promise<number> {
       addDirs: args.addDirs,
       model: args.model,
       permissionMode: args.permissionMode,
+      resume: args.resume,
+      continueSession: args.continueSession,
     });
   } catch (err) {
     process.stderr.write(chalk.red(`${formatError(err)}\n`));

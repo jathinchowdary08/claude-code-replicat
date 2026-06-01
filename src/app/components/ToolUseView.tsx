@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { ToolResult } from '../../tools/types.js';
 import { DiffView } from './DiffView.js';
+import { toolSummaryLines, toolHeader } from '../format.js';
 
 export interface ToolItem {
   id: string;
@@ -12,13 +13,7 @@ export interface ToolItem {
   reason?: string;
 }
 
-function firstLines(s: string, n: number): string {
-  const lines = s.split('\n');
-  const head = lines.slice(0, n).join('\n');
-  return lines.length > n ? `${head} …` : head;
-}
-
-function ResultView({ result }: { result: ToolResult }): React.ReactElement {
+function ResultView({ result, action }: { result: ToolResult; action: string }): React.ReactElement {
   if (result.ui?.kind === 'diff') {
     return (
       <Box marginLeft={2} flexDirection="column">
@@ -26,34 +21,32 @@ function ResultView({ result }: { result: ToolResult }): React.ReactElement {
       </Box>
     );
   }
-  const summary = result.title ?? firstLines(result.output, 3);
+  const lines = toolSummaryLines(result, action);
   return (
-    <Text color={result.isError ? 'red' : 'gray'}>
-      {'  ↳ '}
-      {summary}
-    </Text>
+    <Box flexDirection="column" marginLeft={2}>
+      {lines.map((line, i) => (
+        <Text key={i} color={result.isError ? 'red' : 'gray'}>
+          {i === 0 ? '⎿  ' : '   '}
+          {line}
+        </Text>
+      ))}
+    </Box>
   );
 }
 
 export function ToolUseView({ item }: { item: ToolItem }): React.ReactElement {
-  const marker =
-    item.status === 'running' ? (
-      <Text color="yellow">●</Text>
-    ) : item.status === 'denied' ? (
-      <Text color="red">⨯</Text>
-    ) : (
-      <Text color="green">●</Text>
-    );
-
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box>
-        {marker}
-        <Text bold> {item.name}</Text>
-        <Text color="gray"> {item.title}</Text>
+        <Text color="gray">{toolHeader(item.name, item.title)}</Text>
       </Box>
-      {item.status === 'denied' && <Text color="red">{'  ↳ denied: '}{item.reason}</Text>}
-      {item.result && <ResultView result={item.result} />}
+      {item.status === 'denied' && (
+        <Text color="red">
+          {'  ⎿  denied: '}
+          {item.reason}
+        </Text>
+      )}
+      {item.result && <ResultView result={item.result} action={item.title} />}
     </Box>
   );
 }

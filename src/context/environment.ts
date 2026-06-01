@@ -1,14 +1,31 @@
-/** Gathers an environment block (cwd, git, platform, date) for the system prompt. */
-import { execFileSync } from 'node:child_process';
+/**
+ * Gathers an environment block (cwd, git, platform, date) for the system prompt.
+ * Deliberately filesystem-only (no `git` subprocess) so it never slows startup —
+ * spawning git here previously blocked the UI from painting, badly on Windows.
+ */
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { resolveModel } from '../llm/models.js';
 
-function git(args: string[], cwd: string): string | null {
+/** Walk up from cwd to find a `.git` entry; returns its path or null. */
+function findGitDir(cwd: string): string | null {
+  let dir = cwd;
+  for (;;) {
+    if (existsSync(join(dir, '.git'))) return join(dir, '.git');
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/** Read the current branch from `.git/HEAD` without spawning git. */
+function branchFromHead(gitDir: string): string | undefined {
   try {
-    return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 })
-      .toString()
-      .trim();
+    const head = readFileSync(join(gitDir, 'HEAD'), 'utf8').trim();
+    const ref = head.match(/^ref:\s*refs\/heads\/(.+)$/);
+    return ref ? ref[1] : head.slice(0, 12); // detached HEAD → short sha
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -18,26 +35,17 @@ export interface EnvInfo {
   date: string;
   isRepo: boolean;
   gitBranch?: string;
-  gitStatusShort?: string;
 }
 
 export function gatherEnvironment(cwd: string): EnvInfo {
-  const isRepo = git(['rev-parse', '--is-inside-work-tree'], cwd) === 'true';
-  const info: EnvInfo = {
+  const gitDir = findGitDir(cwd);
+  return {
     cwd,
     platform: process.platform,
     date: new Date().toISOString().slice(0, 10),
-    isRepo,
+    isRepo: gitDir !== null,
+    gitBranch: gitDir ? branchFromHead(gitDir) : undefined,
   };
-  if (isRepo) {
-    info.gitBranch = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd) ?? undefined;
-    const status = git(['status', '--short'], cwd);
-    if (status) {
-      const lines = status.split('\n');
-      info.gitStatusShort = lines.length > 20 ? `${lines.slice(0, 20).join('\n')}\n… (${lines.length - 20} more)` : status;
-    }
-  }
-  return info;
 }
 
 export function environmentBlock(cwd: string, model: string): string {
@@ -45,7 +53,7 @@ export function environmentBlock(cwd: string, model: string): string {
   const m = resolveModel(model);
   const lines = [
     'Here is information about the environment you are running in:',
-    `<env>`,
+    '<env>',
     `Working directory: ${env.cwd}`,
     `Platform: ${env.platform}`,
     `Today's date: ${env.date}`,
@@ -54,8 +62,5 @@ export function environmentBlock(cwd: string, model: string): string {
   ];
   if (env.gitBranch) lines.push(`Git branch: ${env.gitBranch}`);
   lines.push('</env>');
-  if (env.gitStatusShort) {
-    lines.push('', 'Git status (short):', '```', env.gitStatusShort, '```');
-  }
   return lines.join('\n');
 }

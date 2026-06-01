@@ -1,55 +1,79 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { parseMarkdown, type InlineSpan, type MdBlock } from '../markdown.js';
+import { colors } from '../theme.js';
 
-/** A deliberately small markdown renderer: headings, lists, and fenced code. */
-export function Markdown({ text, color }: { text: string; color?: string }): React.ReactElement {
-  const lines = text.split('\n');
-  const out: React.ReactElement[] = [];
-  let inFence = false;
-
-  lines.forEach((line, i) => {
-    if (line.trimStart().startsWith('```')) {
-      inFence = !inFence;
-      return;
-    }
-    if (inFence) {
-      out.push(
-        <Text key={i} color="gray">
-          {'  '}
-          {line}
-        </Text>,
-      );
-      return;
-    }
-    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
-    if (heading) {
-      out.push(
-        <Text key={i} bold color="cyan">
-          {heading[2]}
-        </Text>,
-      );
-      return;
-    }
-    const bullet = /^(\s*)[-*]\s+(.*)$/.exec(line);
-    if (bullet) {
-      out.push(
-        <Text key={i} color={color}>
-          {bullet[1]}• {stripInline(bullet[2] ?? '')}
-        </Text>,
-      );
-      return;
-    }
-    out.push(
-      <Text key={i} color={color}>
-        {stripInline(line) || ' '}
-      </Text>,
-    );
-  });
-
-  return <Box flexDirection="column">{out}</Box>;
+function Inline({ spans }: { spans: InlineSpan[] }): React.ReactElement {
+  return (
+    <Text>
+      {spans.map((s, i) => (
+        <Text key={i} bold={s.bold} italic={s.italic} color={s.code ? colors.accent : undefined}>
+          {s.text}
+        </Text>
+      ))}
+    </Text>
+  );
 }
 
-/** Strip the most common inline markers so they don't show as literal characters. */
-function stripInline(s: string): string {
-  return s.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+function Block({ block }: { block: MdBlock }): React.ReactElement {
+  switch (block.type) {
+    case 'blank':
+      return <Text> </Text>;
+    case 'rule':
+      return <Text color={colors.dim}>{'─'.repeat(40)}</Text>;
+    case 'heading':
+      return (
+        <Text bold color={block.level <= 1 ? colors.accent : colors.info}>
+          <Inline spans={block.spans} />
+        </Text>
+      );
+    case 'quote':
+      return (
+        <Text color={colors.dim}>
+          {'│ '}
+          <Inline spans={block.spans} />
+        </Text>
+      );
+    case 'bullet':
+      return (
+        <Text>
+          {'  '.repeat(block.indent)}
+          <Text color={colors.accent}>• </Text>
+          <Inline spans={block.spans} />
+        </Text>
+      );
+    case 'ordered':
+      return (
+        <Text>
+          {'  '.repeat(block.indent)}
+          <Text color={colors.accent}>{block.number}. </Text>
+          <Inline spans={block.spans} />
+        </Text>
+      );
+    case 'code':
+      return (
+        <Box flexDirection="column">
+          {block.lang ? <Text color={colors.dim}>{block.lang}</Text> : null}
+          {block.lines.map((line, i) => (
+            <Text key={i} color={colors.info}>
+              {'  '}
+              {line || ' '}
+            </Text>
+          ))}
+        </Box>
+      );
+    case 'paragraph':
+      return <Inline spans={block.spans} />;
+  }
+}
+
+export function Markdown({ text }: { text: string }): React.ReactElement {
+  const blocks = parseMarkdown(text);
+  return (
+    <Box flexDirection="column">
+      {blocks.map((block, i) => (
+        <Block key={i} block={block} />
+      ))}
+    </Box>
+  );
 }

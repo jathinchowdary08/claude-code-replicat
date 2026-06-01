@@ -1,9 +1,9 @@
-export const HELP_TEXT = `agent — a terminal AI coding agent
+export const HELP_TEXT = `acode — a terminal AI coding agent
 
 Usage:
-  agent [prompt]                 Start interactive mode (or run a one-off prompt)
-  agent -p "<prompt>"            Print mode: run once, stream the result, exit
-  echo "<prompt>" | agent -p     Print mode reading the prompt from stdin
+  acode [prompt]                 Start interactive mode (or run a one-off prompt)
+  acode -p "<prompt>"            Print mode: run once, stream the result, exit
+  echo "<prompt>" | acode -p     Print mode reading the prompt from stdin
 
 Options:
   -p, --print                    Non-interactive: run once and print the result
@@ -13,8 +13,8 @@ Options:
       --cwd <dir>                Set the working directory
       --output-format <fmt>      text | json  (print mode)
       --verbose                  Verbose logging to stderr
-  -c, --continue                 Resume the most recent session (Phase 2)
-      --resume <id>              Resume a specific session (Phase 2)
+  -c, --continue                 Resume the most recent session for this project
+      --resume <id>              Resume a specific session by id
   -h, --help                     Show this help
   -v, --version                  Show the version
 

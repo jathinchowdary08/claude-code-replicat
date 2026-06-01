@@ -69,13 +69,15 @@ export interface CompactOptions {
   contextWindow: number;
   /** Fraction of the window that triggers compaction. */
   threshold?: number;
+  /** Force compaction regardless of the threshold (manual /compact). */
+  force?: boolean;
 }
 
 /** If near the context limit, replace older turns with a summary. Mutates `messages`. */
 export async function maybeCompact(opts: CompactOptions): Promise<boolean> {
   const { client, model, messages, contextWindow } = opts;
   const threshold = opts.threshold ?? 0.8;
-  if (estimateTokens(messages) < contextWindow * threshold) return false;
+  if (!opts.force && estimateTokens(messages) < contextWindow * threshold) return false;
   if (messages.length <= 4) return false;
 
   const boundary = userBoundary(messages, 4);
