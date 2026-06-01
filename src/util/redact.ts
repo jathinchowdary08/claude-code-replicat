@@ -14,6 +14,25 @@ const PATTERNS: Array<{ re: RegExp; replace: string }> = [
   { re: /(Bearer\s+)[A-Za-z0-9._-]{12,}/gi, replace: '$1[REDACTED]' },
   // AWS access key ids.
   { re: /AKIA[0-9A-Z]{16}/g, replace: 'AKIA[REDACTED]' },
+  // PEM private key blocks (multiline).
+  {
+    re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g,
+    replace: '[REDACTED-PRIVATE-KEY]',
+  },
+  // Google API keys.
+  { re: /AIza[0-9A-Za-z_-]{35}/g, replace: 'AIza[REDACTED]' },
+  // Slack tokens.
+  { re: /xox[abprs]-[A-Za-z0-9-]{10,}/g, replace: 'xox-[REDACTED]' },
+  // Slack incoming-webhook URLs.
+  { re: /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]+/g, replace: '[REDACTED-SLACK-WEBHOOK]' },
+  // npm tokens.
+  { re: /npm_[A-Za-z0-9]{36}/g, replace: 'npm_[REDACTED]' },
+  // GitHub fine-grained PATs.
+  { re: /github_pat_[A-Za-z0-9_]{22,}/g, replace: 'github_pat_[REDACTED]' },
+  // Stripe-style secret keys.
+  { re: /\b(sk|rk)_(live|test)_[A-Za-z0-9]{10,}/g, replace: '$1_$2_[REDACTED]' },
+  // JSON Web Tokens.
+  { re: /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, replace: '[REDACTED-JWT]' },
 ];
 
 const SECRET_ENV_RE = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH)/i;

@@ -15,7 +15,16 @@ export async function runPrint(args: CliArgs, prompt: string): Promise<number> {
     addDirs: args.addDirs,
     model: args.model,
     permissionMode: args.permissionMode,
+    resume: args.resume,
+    continueSession: args.continueSession,
   });
+
+  await rt.hooks.run('SessionStart', { cwd: args.cwd });
+  const promptHook = await rt.hooks.run('UserPromptSubmit', { prompt });
+  if (promptHook.block) {
+    process.stderr.write(chalk.yellow(`${promptHook.reason ?? 'Blocked by a UserPromptSubmit hook.'}\n`));
+    return 2;
+  }
 
   const scope = createCancelScope();
   const onSigint = () => scope.cancel();
@@ -28,7 +37,9 @@ export async function runPrint(args: CliArgs, prompt: string): Promise<number> {
   });
 
   const json = args.outputFormat === 'json';
-  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
+  const userMessage: Anthropic.MessageParam = { role: 'user', content: prompt };
+  const messages: Anthropic.MessageParam[] = [...rt.initialMessages, userMessage];
+  rt.session.appendMessage(userMessage);
   let usage: UsageTotals = emptyUsage();
   let cost = 0;
   let result = '';
@@ -47,6 +58,8 @@ export async function runPrint(args: CliArgs, prompt: string): Promise<number> {
       ctx: rt.ctx,
       confirmPermission,
       enableCompaction: true,
+      thinkingBudget: rt.thinkingBudget,
+      onMessage: (m) => rt.session.appendMessage(m),
     })) {
       switch (ev.type) {
         case 'assistant_text':

@@ -4,21 +4,22 @@ import type { HistoryItem } from '../hooks/useAgentLoop.js';
 import { Markdown } from './Markdown.js';
 import { ToolUseView } from './ToolUseView.js';
 
-function Item({ item }: { item: HistoryItem }): React.ReactElement {
+export function MessageItem({ item }: { item: HistoryItem }): React.ReactElement {
   switch (item.kind) {
     case 'user':
       return (
         <Box marginTop={1}>
-          <Text color="blue" bold>
-            {'❯ '}
-          </Text>
-          <Text>{item.text}</Text>
+          <Text color="gray">{'> '}</Text>
+          <Text color="gray">{item.text}</Text>
         </Box>
       );
     case 'assistant':
       return (
         <Box marginTop={1}>
-          <Markdown text={item.text} />
+          <Text color="white">{'● '}</Text>
+          <Box flexDirection="column">
+            <Markdown text={item.text} />
+          </Box>
         </Box>
       );
     case 'thinking':
@@ -44,7 +45,7 @@ export function MessageList({ items }: { items: HistoryItem[] }): React.ReactEle
   return (
     <Box flexDirection="column">
       {items.map((item, i) => (
-        <Item key={i} item={item} />
+        <MessageItem key={i} item={item} />
       ))}
     </Box>
   );

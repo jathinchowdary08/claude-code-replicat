@@ -18,12 +18,17 @@ import { loadProjectContext } from './context/project.js';
 import { PathSandbox } from './util/fs.js';
 import { buildSystemPrompt } from './agent/systemPrompt.js';
 import { makeSubagentRunner } from './agent/subagent.js';
+import { openSession, type SessionStore } from './session/store.js';
 
 export interface RuntimeOptions {
   cwd: string;
   addDirs?: string[];
   model?: string;
   permissionMode?: PermissionMode;
+  /** Resume a specific session id. */
+  resume?: string;
+  /** Resume the latest session for this project. */
+  continueSession?: boolean;
 }
 
 export interface Runtime {
@@ -36,6 +41,14 @@ export interface Runtime {
   ctx: ToolContext;
   sandbox: PathSandbox;
   mode: PermissionMode;
+  /** The transcript for this run; messages are appended as the conversation grows. */
+  session: SessionStore;
+  /** Prior messages when resuming (empty for a fresh session). */
+  initialMessages: Anthropic.MessageParam[];
+  /** True when a prior transcript was reopened. */
+  resumed: boolean;
+  /** Extended-thinking budget in tokens (undefined = disabled). */
+  thinkingBudget?: number;
 }
 
 export function createRuntime(opts: RuntimeOptions): Runtime {
@@ -43,6 +56,13 @@ export function createRuntime(opts: RuntimeOptions): Runtime {
   const model = opts.model ?? settings.model ?? DEFAULT_MODEL;
   const mode: PermissionMode = opts.permissionMode ?? (settings.permissionMode as PermissionMode) ?? 'default';
   const addDirs = opts.addDirs ?? [];
+  const thinkingBudget = settings.thinking?.budgetTokens ?? (settings.thinking?.enabled ? 4096 : undefined);
+
+  const { store: session, messages: initialMessages, resumed } = openSession(opts.cwd, {
+    resume: opts.resume,
+    continueLatest: opts.continueSession,
+    model,
+  });
 
   const sandbox = new PathSandbox([opts.cwd, ...addDirs]);
   const projectContext = loadProjectContext(opts.cwd, addDirs);
@@ -67,5 +87,5 @@ export function createRuntime(opts: RuntimeOptions): Runtime {
   });
   const hooks = new HookRunner((settings.hooks ?? {}) as HooksConfig, opts.cwd);
 
-  return { client, model, system, registry, permissions, hooks, ctx, sandbox, mode };
+  return { client, model, system, registry, permissions, hooks, ctx, sandbox, mode, session, initialMessages, resumed, thinkingBudget };
 }

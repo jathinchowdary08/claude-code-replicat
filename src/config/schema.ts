@@ -19,6 +19,22 @@ export const settingsSchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
   hooks: z.record(z.string(), z.array(hookConfigSchema)).optional(),
   theme: z.string().optional(),
+  web: z
+    .object({
+      /** If non-empty, WebFetch may only reach these hosts (and subdomains). */
+      allowedHosts: z.array(z.string()).default([]),
+      /** Network timeout in milliseconds for WebFetch/WebSearch. */
+      timeoutMs: z.number().int().positive().optional(),
+    })
+    .optional(),
+  thinking: z
+    .object({
+      /** Enable extended thinking (defaults the budget to 4096 tokens). */
+      enabled: z.boolean().optional(),
+      /** Thinking token budget; implies enabled when set. */
+      budgetTokens: z.number().int().positive().optional(),
+    })
+    .optional(),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;

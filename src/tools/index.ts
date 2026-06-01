@@ -12,6 +12,8 @@ import { taskTool } from './task.js';
 import { bashOutputTool } from './bashOutput.js';
 import { killShellTool } from './killShell.js';
 import { exitPlanModeTool } from './exitPlanMode.js';
+import { webFetchTool, webSearchTool } from './web.js';
+import { notebookEditTool } from './notebook.js';
 
 export const coreTools: Tool[] = [
   readTool,
@@ -26,6 +28,9 @@ export const coreTools: Tool[] = [
   bashOutputTool,
   killShellTool,
   exitPlanModeTool,
+  webFetchTool,
+  webSearchTool,
+  notebookEditTool,
 ];
 
 /** Tools a subagent may use: read-only, no further fan-out, no plan-mode control. */
