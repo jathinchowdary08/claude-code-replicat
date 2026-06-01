@@ -12,6 +12,7 @@ import type { ToolResult, TodoItem } from '../../tools/types.js';
 import type { PermissionMode } from '../../permissions/mode.js';
 import { buildCommandRegistry } from '../../commands/registry.js';
 import { classifyInput } from '../input-mode.js';
+import { reconstructItems } from '../transcript.js';
 import type { CommandContext, SlashCommand } from '../../commands/types.js';
 import { SessionStore } from '../../session/store.js';
 import { maybeCompact, estimateTokens } from '../../agent/compaction.js';
@@ -54,34 +55,6 @@ export interface AgentLoop {
   closeSessionPicker: () => void;
   cycleMode: () => void;
   suggestCommands: (prefix: string) => SlashCommand[];
-}
-
-function reconstructItems(messages: Anthropic.MessageParam[]): HistoryItem[] {
-  const items: HistoryItem[] = [];
-  for (const m of messages) {
-    const content = m.content;
-    if (typeof content === 'string') {
-      items.push(
-        m.role === 'user'
-          ? { kind: 'user', text: content }
-          : { kind: 'assistant', text: content, streaming: false },
-      );
-      continue;
-    }
-    for (const raw of content) {
-      const block = raw as { type: string; text?: string; id?: string; name?: string };
-      if (block.type === 'text' && block.text) {
-        items.push(
-          m.role === 'user'
-            ? { kind: 'user', text: block.text }
-            : { kind: 'assistant', text: block.text, streaming: false },
-        );
-      } else if (block.type === 'tool_use') {
-        items.push({ kind: 'tool', id: block.id ?? '', name: block.name ?? 'tool', title: block.name ?? 'tool', status: 'done' });
-      }
-    }
-  }
-  return items;
 }
 
 export function useAgentLoop(rt: Runtime): AgentLoop {
