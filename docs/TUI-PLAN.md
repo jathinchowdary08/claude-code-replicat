@@ -90,6 +90,59 @@ live redraw stays cheap); typing **during** a turn queues without lag.
 
 ---
 
+## Performance & latency recipe (fast, lag-free like Claude Code)
+
+CC's snappiness is **architecture, not tuning**. The lag/garble in the current TUI is the
+standard Ink failure mode: the whole transcript re-renders on every keystroke and every streamed
+token. The fixes below are mandatory for Phase 1, not optional polish.
+
+### Root causes → fixes
+
+| Cause | Fix |
+|-------|-----|
+| Whole transcript re-renders per keystroke (#1 cause) | Committed history lives in `<Static items={transcript}>` — Ink prints it **once** and never redraws it. Only the small live region re-renders. |
+| A render per streamed token | Don't `setState` per delta. Accumulate deltas in a `ref`; flush to state on a **~30 ms throttle** (≤ ~30 renders/sec). |
+| Input state lifted into App | Keep the input buffer **local to `InputBox`**; App must not re-render while typing. Submit via callback only. |
+| Paste = N keypress events = N renders | Enable **bracketed paste**: a paste arrives as one event. Removes paste freezes. |
+| Markdown/diff/highlight parsed every render | Parse **once at commit time**; cache by content (memoize). Never parse on the render path. |
+| Spinner re-renders the whole tree | Isolate the `setInterval` inside `Spinner`/`Thinking` so only it re-renders. |
+| `console.log` / direct stdout writes while Ink owns the screen | Route everything through Ink (or `patchConsole`). Stray writes garble the frame. |
+| Large live region → Yoga relayout cost | Live region = active turn + spinner + todos + input only; everything finalized goes to `<Static>`. |
+| Unstable keys / inline objects each render | Stable keys on transcript items; `React.memo` every item + live component; `useCallback`/`useMemo` for handlers and derived data. |
+
+### Mental model (the whole trick)
+
+```
+<Static items={transcript}>   ← printed once, never redrawn → flat cost as it grows
+  …all finished turns…
+</Static>
+<Live>                        ← the ONLY thing that re-renders
+  streaming assistant block   ← throttled flush (~30 ms)
+  spinner + todos             ← spinner owns its own timer
+  InputBox                    ← owns its own buffer; always interactive
+</Live>
+```
+
+On `turn_end` the finished block moves Live → `transcript` (Static) atomically and Live clears.
+History cost stays flat regardless of conversation length because Ink stops touching it.
+
+### Performance budget (assert in tests)
+
+- Keystroke → echo **< 16 ms**, independent of transcript length (1 vs 1000 turns).
+- Streaming capped at ~30 renders/sec; no per-token thrash.
+- Resize reflows **only** the live region; committed history never reflows.
+- `useAgentLoop` flushes streaming via a throttle (ref-accumulate + timer), never raw per-delta
+  `setState`.
+
+### Anti-patterns to grep for and remove
+- Transcript array held in App state and re-rendered outside `<Static>`.
+- `setMessages([...messages, delta])` on every stream chunk.
+- Input `value` state owned by App / passed down and lifted on every keypress.
+- `parseMarkdown(...)` / `computeDiff(...)` called inside a component body (not memoized).
+- Any `console.log`/`process.stdout.write` outside Ink during a session.
+
+---
+
 ## Phase 2 — Visual parity (component-by-component)
 
 Each component gets a CC-faithful render + a snapshot test. Files under `src/app/components/`.
