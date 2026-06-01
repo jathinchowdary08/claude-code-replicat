@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import type { SlashCommand } from '../../commands/types.js';
+import * as ed from '../editor.js';
+import { colors } from '../theme.js';
 
 interface SuggestItem {
   label: string;
@@ -46,12 +48,12 @@ export function InputBox({
   suggestCommands: (prefix: string) => SlashCommand[];
   files: string[];
 }): React.ReactElement {
-  const [value, setValue] = useState('');
+  const [state, setState] = useState<ed.EditorState>(ed.empty);
+  const value = state.value;
   const [selected, setSelected] = useState(0);
   const history = useRef<string[]>([]);
   const histIdx = useRef<number>(-1);
 
-  // Track the terminal width so the box always spans the full width (and reflows on resize).
   const { stdout } = useStdout();
   const [cols, setCols] = useState<number>(stdout?.columns ?? 80);
   useEffect(() => {
@@ -69,14 +71,13 @@ export function InputBox({
   );
   const menuOpen = !disabled && items.length > 0;
   const sel = Math.min(selected, Math.max(0, items.length - 1));
-
   useEffect(() => {
     setSelected(0);
   }, [value]);
 
   const complete = () => {
     const it = items[sel];
-    if (it) setValue(it.insert);
+    if (it) setState(ed.fromValue(it.insert));
   };
 
   useInput(
@@ -89,12 +90,8 @@ export function InputBox({
         const v = value;
         if (v.trim()) history.current.push(v);
         histIdx.current = -1;
-        setValue('');
+        setState(ed.empty);
         onSubmit(v);
-        return;
-      }
-      if (key.backspace || key.delete) {
-        setValue((v) => v.slice(0, -1));
         return;
       }
       if (key.upArrow) {
@@ -105,7 +102,7 @@ export function InputBox({
         const h = history.current;
         if (h.length === 0) return;
         histIdx.current = histIdx.current < 0 ? h.length - 1 : Math.max(0, histIdx.current - 1);
-        setValue(h[histIdx.current] ?? '');
+        setState(ed.fromValue(h[histIdx.current] ?? ''));
         return;
       }
       if (key.downArrow) {
@@ -118,45 +115,69 @@ export function InputBox({
         histIdx.current += 1;
         if (histIdx.current >= h.length) {
           histIdx.current = -1;
-          setValue('');
+          setState(ed.empty);
         } else {
-          setValue(h[histIdx.current] ?? '');
+          setState(ed.fromValue(h[histIdx.current] ?? ''));
         }
         return;
       }
+      if (key.leftArrow) {
+        setState(key.ctrl || key.meta ? ed.wordLeft : ed.left);
+        return;
+      }
+      if (key.rightArrow) {
+        setState(key.ctrl || key.meta ? ed.wordRight : ed.right);
+        return;
+      }
+      // Backspace and Delete both behave as backspace (terminals disagree on which they send).
+      if (key.backspace || key.delete) {
+        setState(ed.backspace);
+        return;
+      }
+      if (key.ctrl && input === 'a') return setState(ed.home);
+      if (key.ctrl && input === 'e') return setState(ed.end);
+      if (key.ctrl && input === 'u') return setState(ed.clearLine);
+      if (key.ctrl && input === 'w') return setState(ed.deleteWordLeft);
+      if (key.ctrl && input === 'k') return setState(ed.killToEnd);
+      // Ignore other control/meta combos (handled globally) and non-printable input.
       if (key.ctrl || key.meta || key.escape) return;
-      if (input) setValue((v) => v + input);
+      if (input) setState((s) => ed.insert(s, input));
     },
     { isActive: !disabled },
   );
 
+  const before = value.slice(0, state.cursor);
+  const cursorChar = value.slice(state.cursor, state.cursor + 1) || ' ';
+  const after = value.slice(state.cursor + 1);
+
   return (
     <Box flexDirection="column" width={cols}>
-      <Box borderStyle="round" borderColor={disabled ? 'gray' : 'cyan'} paddingX={1} width={cols}>
-        <Text color={disabled ? 'gray' : 'cyan'}>{'> '}</Text>
+      <Box borderStyle="round" borderColor={disabled ? colors.dim : colors.info} paddingX={1} width={cols}>
+        <Text color={disabled ? colors.dim : colors.info}>{'> '}</Text>
         {disabled ? (
-          <Text color="gray">working… (esc to interrupt)</Text>
-        ) : value ? (
+          <Text color={colors.dim}>working… (esc to interrupt)</Text>
+        ) : value.length === 0 ? (
           <Text>
-            {value}
             <Text inverse> </Text>
+            <Text color={colors.dim}>{PLACEHOLDER}</Text>
           </Text>
         ) : (
           <Text>
-            <Text inverse> </Text>
-            <Text color="gray">{PLACEHOLDER}</Text>
+            {before}
+            <Text inverse>{cursorChar}</Text>
+            {after}
           </Text>
         )}
       </Box>
       {menuOpen && (
         <Box flexDirection="column" marginLeft={2}>
           {items.map((it, i) => (
-            <Text key={it.label} color={i === sel ? 'cyan' : 'gray'}>
+            <Text key={it.label} color={i === sel ? colors.info : colors.dim}>
               {(i === sel ? '❯ ' : '  ') + it.label}
               {it.hint ? `  — ${it.hint}` : ''}
             </Text>
           ))}
-          <Text color="gray">  ↑↓ select · tab complete</Text>
+          <Text color={colors.dim}>  ↑↓ select · tab complete</Text>
         </Box>
       )}
     </Box>

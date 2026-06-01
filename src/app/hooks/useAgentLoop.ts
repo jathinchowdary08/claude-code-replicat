@@ -11,11 +11,13 @@ import { formatError } from '../../util/errors.js';
 import type { ToolResult, TodoItem } from '../../tools/types.js';
 import type { PermissionMode } from '../../permissions/mode.js';
 import { buildCommandRegistry } from '../../commands/registry.js';
-import { isSlashCommand } from '../../commands/parse.js';
+import { classifyInput } from '../input-mode.js';
 import type { CommandContext, SlashCommand } from '../../commands/types.js';
 import { SessionStore } from '../../session/store.js';
 import { maybeCompact, estimateTokens } from '../../agent/compaction.js';
 import { resolveModel } from '../../llm/models.js';
+import { appendFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export type HistoryItem =
   | { kind: 'user'; text: string }
@@ -320,17 +322,70 @@ export function useAgentLoop(rt: Runtime): AgentLoop {
     [registry, rt, push, runTurn, exit],
   );
 
+  /** `!cmd` — run a shell command inline (no model call); its output is kept for context. */
+  const runBashLine = useCallback(
+    (command: string) => {
+      if (!command) return;
+      push({ kind: 'user', text: `! ${command}` });
+      const id = `bash-${Date.now()}`;
+      push({ kind: 'tool', id, name: 'Bash', title: `Bash(${command})`, status: 'running' });
+      setStatus('running');
+      const scope = createCancelScope();
+      cancelRef.current = scope;
+      void (async () => {
+        try {
+          const res = await rt.registry.dispatch('Bash', { command }, rt.ctx, scope.signal);
+          updateTool(id, { status: 'done', result: res });
+          const msg: Anthropic.MessageParam = { role: 'user', content: `I ran \`${command}\`:\n\n${res.output}` };
+          messagesRef.current.push(msg);
+          rt.session.appendMessage(msg);
+        } catch (err) {
+          updateTool(id, { status: 'denied', reason: formatError(err) });
+        } finally {
+          setStatus('idle');
+          cancelRef.current = null;
+        }
+      })();
+    },
+    [rt, push, updateTool],
+  );
+
+  /** `#note` — append a note to the project's AGENTS.md memory. */
+  const addMemory = useCallback(
+    (note: string) => {
+      if (!note) return;
+      try {
+        appendFileSync(join(rt.ctx.cwd, 'AGENTS.md'), `\n- ${note}\n`, 'utf8');
+        push({ kind: 'assistant', text: `Added to AGENTS.md: ${note}`, streaming: false });
+      } catch (err) {
+        push({ kind: 'error', text: formatError(err) });
+      }
+    },
+    [rt, push],
+  );
+
   const send = useCallback(
     (text: string) => {
-      if (!text.trim()) return;
-      if (isSlashCommand(text)) {
-        push({ kind: 'user', text });
-        void handleCommand(text);
-        return;
+      const mode = classifyInput(text);
+      switch (mode.kind) {
+        case 'empty':
+          return;
+        case 'command':
+          push({ kind: 'user', text: mode.text });
+          void handleCommand(mode.text);
+          return;
+        case 'bash':
+          runBashLine(mode.command);
+          return;
+        case 'memory':
+          addMemory(mode.note);
+          return;
+        case 'prompt':
+          runTurn(mode.text, mode.text);
+          return;
       }
-      runTurn(text, text);
     },
-    [push, handleCommand, runTurn],
+    [push, handleCommand, runTurn, runBashLine, addMemory],
   );
 
   const cancel = useCallback(() => cancelRef.current?.cancel(), []);
