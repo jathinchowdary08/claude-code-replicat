@@ -131,7 +131,14 @@ export function App({
         </Box>
       )}
 
-      <StatusBar model={loop.model} cwd={rt.ctx.cwd} mode={loop.mode} usage={loop.usage} cost={loop.cost} />
+      <StatusBar
+        model={loop.model}
+        cwd={rt.ctx.cwd}
+        mode={loop.mode}
+        usage={loop.usage}
+        cost={loop.cost}
+        contextTokens={loop.contextTokens}
+      />
     </Box>
   );
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { ToolResult } from '../../tools/types.js';
 import { DiffView } from './DiffView.js';
-import { toolSummaryLines } from '../format.js';
+import { toolSummaryLines, toolHeader } from '../format.js';
 
 export interface ToolItem {
   id: string;
@@ -38,7 +38,7 @@ export function ToolUseView({ item }: { item: ToolItem }): React.ReactElement {
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box>
-        <Text color="gray">{item.title}</Text>
+        <Text color="gray">{toolHeader(item.name, item.title)}</Text>
       </Box>
       {item.status === 'denied' && (
         <Text color="red">

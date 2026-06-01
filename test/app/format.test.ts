@@ -6,6 +6,8 @@ import {
   tildePath,
   firstLines,
   toolSummaryLines,
+  toolHeader,
+  contextLeftPct,
 } from '../../src/app/format.js';
 
 describe('format helpers', () => {
@@ -44,5 +46,23 @@ describe('format helpers', () => {
     ]);
     expect(toolSummaryLines({ output: 'line1\nline2' }, 'Bash echo')).toEqual(['line1', 'line2']);
     expect(toolSummaryLines({ output: '' }, 'Bash x')).toEqual(['(done)']);
+  });
+});
+
+describe('toolHeader', () => {
+  it('formats `Name arg` as `Name(arg)`, else passes the title through', () => {
+    expect(toolHeader('Read', 'Read src/x.ts')).toBe('Read(src/x.ts)');
+    expect(toolHeader('Glob', 'Glob **/*.ts')).toBe('Glob(**/*.ts)');
+    expect(toolHeader('Bash', 'Check if docker is running')).toBe('Check if docker is running');
+    expect(toolHeader('TodoWrite', 'Update todos')).toBe('Update todos');
+  });
+});
+
+describe('contextLeftPct', () => {
+  it('reports remaining context, clamped to 0-100', () => {
+    expect(contextLeftPct(0, 200_000)).toBe(100);
+    expect(contextLeftPct(100_000, 200_000)).toBe(50);
+    expect(contextLeftPct(200_000, 200_000)).toBe(0);
+    expect(contextLeftPct(250_000, 200_000)).toBe(0);
   });
 });

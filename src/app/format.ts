@@ -45,3 +45,19 @@ export function toolSummaryLines(result: ToolResult, action: string, max = 8): s
   const body = result.output.trim() ? firstLines(result.output, max) : (result.title ?? '(done)');
   return body.split('\n');
 }
+
+/**
+ * Claude-Code-style tool header: a `Name arg` title becomes `Name(arg)`; anything
+ * else (e.g. a Bash description) is passed through unchanged.
+ */
+export function toolHeader(name: string, title: string): string {
+  if (!title || title === name) return name;
+  if (title.startsWith(`${name} `)) return `${name}(${title.slice(name.length + 1)})`;
+  return title;
+}
+
+/** Percent of the context window still free, clamped to 0-100. */
+export function contextLeftPct(tokens: number, window: number): number {
+  if (window <= 0) return 100;
+  return Math.max(0, Math.min(100, Math.round((1 - tokens / window) * 100)));
+}

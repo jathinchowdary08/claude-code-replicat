@@ -14,7 +14,7 @@ import { buildCommandRegistry } from '../../commands/registry.js';
 import { isSlashCommand } from '../../commands/parse.js';
 import type { CommandContext, SlashCommand } from '../../commands/types.js';
 import { SessionStore } from '../../session/store.js';
-import { maybeCompact } from '../../agent/compaction.js';
+import { maybeCompact, estimateTokens } from '../../agent/compaction.js';
 import { resolveModel } from '../../llm/models.js';
 
 export type HistoryItem =
@@ -37,6 +37,7 @@ export interface AgentLoop {
   status: 'idle' | 'running';
   usage: UsageTotals;
   cost: number;
+  contextTokens: number;
   todos: TodoItem[];
   model: string;
   mode: PermissionMode;
@@ -93,6 +94,7 @@ export function useAgentLoop(rt: Runtime): AgentLoop {
   const [pending, setPending] = useState<PendingPrompt | null>(null);
   const [modelPicker, setModelPicker] = useState(false);
   const [sessionPicker, setSessionPicker] = useState(false);
+  const [contextTokens, setContextTokens] = useState(0);
 
   const messagesRef = useRef<Anthropic.MessageParam[]>([...rt.initialMessages]);
   const cancelRef = useRef<CancelScope | null>(null);
@@ -228,6 +230,7 @@ export function useAgentLoop(rt: Runtime): AgentLoop {
                 costRef.current += ev.cost;
                 setUsage(usageRef.current);
                 setCost(costRef.current);
+                setContextTokens(ev.usage.input + ev.usage.cacheRead);
                 break;
               case 'error':
                 finalizeStreaming();
@@ -268,6 +271,7 @@ export function useAgentLoop(rt: Runtime): AgentLoop {
           messagesRef.current = [];
           rt.ctx.todos.length = 0;
           setTodos([]);
+          setContextTokens(0);
           setItems([{ kind: 'assistant', text: 'Conversation cleared.', streaming: false }]);
           break;
         case 'set-model':
@@ -347,6 +351,7 @@ export function useAgentLoop(rt: Runtime): AgentLoop {
         const loaded = SessionStore.load(rt.ctx.cwd, id);
         messagesRef.current = [...loaded.messages];
         rt.session = SessionStore.at(rt.ctx.cwd, id);
+        setContextTokens(estimateTokens(loaded.messages));
         setItems([
           ...reconstructItems(loaded.messages),
           {
@@ -376,6 +381,7 @@ export function useAgentLoop(rt: Runtime): AgentLoop {
     status,
     usage,
     cost,
+    contextTokens,
     todos,
     model,
     mode,
